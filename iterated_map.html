@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iterated Map Explorer — Custom Function</title>
+  <style>
+    :root {
+      --bg:#0f1115; --fg:#e6e6e6; --muted:#9aa0a6; --accent:#8ab4f8; --ok:#00c853; --warn:#ffb300; --bad:#ff5252;
+      --card:#151821; --card2:#1b1f2b; --grid:#2a3040; --axis:#b0b5bf;
+    }
+    *{box-sizing:border-box;font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial}
+    body{margin:0;background:var(--bg);color:var(--fg);} 
+    header{padding:18px 20px;border-bottom:1px solid #222;background:linear-gradient(180deg,#12151c,#0f1115);} 
+    header h1{margin:0;font-weight:700;font-size:20px}
+    .wrap{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:16px}
+    .card{background:var(--card);border:1px solid #1f2430;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .card .head{padding:12px 14px;border-bottom:1px solid #202535;font-weight:600;color:#d7deea}
+    .card .body{padding:12px 14px}
+    label{display:block;margin:10px 0 6px;font-size:12px;color:var(--muted)}
+    input[type="number"], input[type="text"], select, textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a3040;background:#0e121a;color:#e6e6e6}
+    textarea{min-height:64px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    button{border:1px solid #2a3040;background:var(--card2);color:#e9eef9;padding:8px 10px;border-radius:10px;cursor:pointer}
+    button.accent{border-color:#3a5fbc;background:#203055}
+    button.warn{border-color:#5e3a00;background:#2a1b00}
+    .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .muted{color:var(--muted);font-size:12px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a3040;background:#0e121a;font-size:11px}
+    canvas{width:100%;height:420px;display:block;background:#0c1017;border-bottom-left-radius:14px;border-bottom-right-radius:14px}
+    .grid{position:relative}
+    .series-list{display:flex;flex-direction:column;gap:8px}
+    .series-item{display:flex;align-items:center;justify-content:space-between;border:1px solid #283040;background:#111623;padding:8px 10px;border-radius:10px}
+    .series-item .left{display:flex;align-items:center;gap:8px}
+    .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+    .status{font-weight:600}
+    .status.ok{color:var(--ok)}
+    .status.warn{color:var(--warn)}
+    .status.bad{color:var(--bad)}
+    .kv{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;color:#c9d3e7}
+    .small{font-size:12px}
+    .test-pass{color:#00c853;font-weight:600}
+    .test-fail{color:#ff5252;font-weight:600}
+    details summary{cursor:pointer}
+    .eye{margin-left:6px; font-size:11px; color:var(--muted);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Iterated Map Explorer — custom function, period detection, Lyapunov</h1>
+  </header>
+
+  <div class="wrap">
+    <!-- Controls -->
+    <div class="card">
+      <div class="head">Function & Parameters</div>
+      <div class="body">
+        <label>Function expression <span class="muted">f(x, n, k, p1, p2)</span></label>
+        <textarea id="fn-expr">k*x*(1-x)</textarea>
+        <div class="row3">
+          <div>
+            <label>k</label>
+            <input type="number" id="k" value="3.2" step="0.001" min="-100" max="100" />
+          </div>
+          <div>
+            <label>p1</label>
+            <input type="number" id="p1" value="0" step="0.001" />
+          </div>
+          <div>
+            <label>p2</label>
+            <input type="number" id="p2" value="0" step="0.001" />
+          </div>
+        </div>
+        <div class="row3">
+          <div>
+            <label>Initial value a₀</label>
+            <input type="number" id="a0" value="0.5" step="0.001" />
+          </div>
+          <div>
+            <label>Terms (N)</label>
+            <input type="number" id="terms" value="200" min="2" max="5000" />
+          </div>
+          <div>
+            <label>Burn‑in (%)</label>
+            <input type="number" id="burn" value="60" min="0" max="95" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Label</label>
+            <input type="text" id="label" value="series 1" />
+          </div>
+          <div>
+            <label class="muted">&nbsp;</label>
+            <div class="pill">Use JS Math.* (e.g., <span class="kv">Math.sin</span>). Vars: <span class="kv">x,n,k,p1,p2</span>.</div>
+          </div>
+        </div>
+        <div class="btns">
+          <button class="accent" id="add">Add series</button>
+          <button id="clear">Clear series</button>
+          <button id="export">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="head">Quiz 6 presets (hidden by default)</div>
+      <div class="body">
+        <details>
+          <summary>Show checklist & load options</summary>
+          <div class="small" style="margin:8px 0 12px">
+            <ol>
+              <li><strong>(a)</strong> 20 terms, a₀=0.5, k = <em>2.0</em> and <em>2.8</em>. Graph both; check convergence.</li>
+              <li><strong>(b)</strong> Repeat (a) with a different a₀∈(0,1), e.g. a₀=<em>0.2</em>, for k = <em>2.0</em> and <em>2.8</em>.</li>
+              <li><strong>(c)</strong> 40 terms, k = <em>3.2</em>. Describe behavior.</li>
+              <li><strong>(d)</strong> 100 terms, try k in (3.4,3.5); preset uses <em>k=3.45</em>.</li>
+              <li><strong>(e)</strong> 200 terms, k = <em>3.88</em>, compare a₀ = <em>0.593</em> vs <em>0.594</em>.</li>
+            </ol>
+          </div>
+          <div class="btns">
+            <button id="load-a">Load (a) presets (hidden)</button>
+            <button id="load-b">Load (b) presets (hidden)</button>
+            <button id="load-c">Load (c) presets (hidden)</button>
+            <button id="load-d">Load (d) presets (hidden)</button>
+            <button id="load-e">Load (e) presets (hidden)</button>
+            <button id="unhide-all" class="accent">Unhide all loaded</button>
+            <button id="hide-all">Hide all</button>
+          </div>
+          <div class="muted small">Presets add series with <em>visibility off</em> so your main chart stays clean. Use the eye toggle next to each series to show/hide.</div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Chart & Analysis -->
+    <div class="card grid">
+      <div class="head inline">
+        <span>Main chart (aₙ over n)</span>
+      </div>
+      <canvas id="chart" width="1200" height="420"></canvas>
+      <div class="head">Series & diagnostics</div>
+      <div class="body">
+        <div id="series" class="series-list"></div>
+        <div id="errors" class="muted" style="margin-top:8px"></div>
+      </div>
+      <div class="head">Self‑tests</div>
+      <div class="body">
+        <div class="btns"><button id="run-tests">Run self‑tests</button><span class="muted">(results also in console)</span></div>
+        <details>
+          <summary>Results</summary>
+          <div id="test-results" class="small"></div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const clamp = (x, lo, hi) => (isFinite(x) ? Math.min(hi, Math.max(lo, x)) : lo);
+  const nice = (v, d=6) => (Number.isFinite(v) ? (Math.abs(v) >= 1e6 || Math.abs(v) < 1e-4 ? v.toExponential(2) : v.toFixed(d)) : 'NaN');
+  const colors = (()=>{ // pleasant distinct palette
+    const base = [
+      '#8ab4f8','#f28b82','#fbbc04','#ccff90','#80cbc4','#cf94da','#fdcfe8','#a7ffeb',
+      '#ffcc80','#b39ddb','#c5e1a5','#81d4fa','#ffab91','#e6ee9c'
+    ];
+    let i=0;return ()=>base[i++%base.length];
+  })();
+
+  let compiled = null;
+  function compileFn(expr){
+    try{
+      // Create f(x,n,k,p1,p2)
+      const fn = new Function('x','n','k','p1','p2',`"use strict"; return (${expr});`);
+      // quick test
+      const t = fn(0.5, 1, 3.2, 0, 0);
+      if(!Number.isFinite(t)) throw new Error('Function returned non‑finite for test input.');
+      return fn;
+    }catch(e){
+      return { __error: e.message };
+    }
+  }
+
+  function sequence(fn, a0, N, params){
+    const {k,p1,p2} = params;
+    const seq = new Array(N);
+    let x = a0;
+    for(let n=0; n<N; n++){
+      seq[n] = x;
+      let y;
+      try{
+        y = fn(x, n, k, p1, p2);
+      }catch(err){
+        return { data: seq.slice(0,n+1), error: String(err) };
+      }
+      if(!Number.isFinite(y)){
+        return { data: seq.slice(0,n+1), error: 'Non‑finite iterate encountered.' };
+      }
+      x = y;
+    }
+    return { data: seq };
+  }
+
+  function detectPeriod(data, maxP=8, burnInFrac=0.6, tol=1e-7){
+    const start = Math.floor(data.length*burnInFrac);
+    const tail = data.slice(start);
+    for(let p=1; p<=maxP; p++){
+      let ok = true;
+      for(let i=0;i<tail.length-p;i++){
+        if(Math.abs(tail[i]-tail[i+p])>tol){ ok=false; break; }
+      }
+      if(ok) return p;
+    }
+    return 0;
+  }
+
+  function lyapunov(seq, fn, params, burn=20, eps=1e-7){
+    // numeric derivative: f'(x) ≈ (f(x+eps) - f(x-eps))/(2eps)
+    const {k,p1,p2} = params;
+    let s=0, c=0;
+    for(let i=1;i<seq.length;i++){
+      const x = seq[i-1];
+      let f1, f2;
+      try{
+        f1 = fn(x+eps, i-1, k, p1, p2);
+        f2 = fn(x-eps, i-1, k, p1, p2);
+      }catch(_){ continue; }
+      const deriv = Math.abs((f1 - f2)/(2*eps));
+      if(deriv>0 && Number.isFinite(deriv)){
+        if(i>=burn){ s += Math.log(deriv); c++; }
+      }
+    }
+    return c ? s/c : -Infinity;
+  }
+
+  // -------- Tick helpers (new) --------
+  function niceStep(span, target=10){
+    if(!isFinite(span) || span<=0) return 1;
+    const raw = span/target;
+    const power = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw/power;
+    let step;
+    if(n<1.5) step = 1*power; else if(n<3) step = 2*power; else if(n<7) step = 5*power; else step = 10*power;
+    return step;
+  }
+  function makeTicks(min, max, target=10){
+    const step = niceStep(max-min, target);
+    const start = Math.ceil(min/step)*step;
+    const ticks = [];
+    for(let v=start; v<=max+1e-12; v+=step){ ticks.push(+v.toFixed(12)); }
+    return {ticks, step};
+  }
+  function fmtTick(v, step){
+    if(!isFinite(v)) return '';
+    const abs = Math.abs(v);
+    if(abs>=1e5 || (step && step<1e-4)) return v.toExponential(2);
+    const dec = step ? Math.max(0, Math.min(6, -Math.floor(Math.log10(step))+1)) : 3;
+    let s = v.toFixed(dec);
+    s = s.replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1');
+    return s;
+  }
+
+  // state
+  const series = []; // {label, color, params:{k,p1,p2}, a0, data, error, visible}
+
+  function addSeries(opts={}){
+    const expr = $('fn-expr').value.trim();
+    compiled = compileFn(expr);
+    if(compiled && compiled.__error){
+      $('errors').innerHTML = `<span class="status bad">Function error:</span> <span class="kv">${compiled.__error}</span>`;
+      return;
+    }
+    $('errors').textContent = '';
+
+    const N = Math.max(2, parseInt(('terms' in opts ? opts.terms : $('terms').value)||200,10));
+    const a0 = ('a0' in opts) ? opts.a0 : parseFloat($('a0').value);
+    const k  = ('k'  in opts) ? opts.k  : parseFloat($('k').value);
+    const p1 = ('p1' in opts) ? opts.p1 : parseFloat($('p1').value);
+    const p2 = ('p2' in opts) ? opts.p2 : parseFloat($('p2').value);
+    const labelBase = ('label' in opts) ? opts.label : ($('label').value||'series');
+    const label = `${labelBase} (k=${nice(k,3)}, a0=${nice(a0,3)}, N=${N})`;
+
+    const {data, error} = sequence(compiled, a0, N, {k,p1,p2});
+    const item = { label, color: colors(), params:{k,p1,p2}, a0, data, error, visible: !!opts.visible };
+    series.push(item);
+    render();
+  }
+
+  function clearSeries(){ series.length = 0; render(); }
+
+  function exportCSV(){
+    const vis = series.filter(s=>s.visible);
+    if(vis.length===0) return;
+    const N = Math.max(...vis.map(s=>s.data.length));
+    // header labels sanitized for commas/newlines
+    let csv = 'n,' + vis.map((s,i)=>`s${i+1}_${s.label.replace(/[\,\n]/g,' ')}`).join(',') + '\n';
+    for(let n=0;n<N;n++){
+      const row = [n];
+      for(const s of vis){ row.push(s.data[n]!==undefined ? s.data[n] : ''); }
+      csv += row.join(',')+'\n';
+    }
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'iterates.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function render(){
+    renderList();
+    drawChart();
+  }
+
+  function renderList(){
+    const el = $('series');
+    el.innerHTML = '';
+    const burn = clamp(parseFloat($('burn').value)/100, 0, 0.95);
+    for(let i=0;i<series.length;i++){
+      const s = series[i];
+      const period = detectPeriod(s.data, 8, burn, 1e-6);
+      const lam = lyapunov(s.data, compiled, s.params, Math.floor(s.data.length*burn));
+      const tail = s.data.slice(Math.floor(s.data.length*(1-burn)));
+      const avg = tail.reduce((a,b)=>a+b,0)/tail.length;
+      const sd = Math.sqrt(tail.reduce((a,b)=>a+(b-avg)*(b-avg),0)/tail.length);
+
+      const wrap = document.createElement('div');
+      wrap.className = 'series-item';
+      wrap.innerHTML = `
+        <div class="left">
+          <span class="dot" style="background:${s.color}"></span>
+          <div>
+            <div><strong>${s.label}</strong><span class="eye">${s.visible?'👁️ shown':'🙈 hidden'}</span></div>
+            <div class="small kv">a₀=${nice(s.a0,4)} | k=${nice(s.params.k,4)} | p1=${nice(s.params.p1,4)} | p2=${nice(s.params.p2,4)}</div>
+            ${s.error ? `<div class="small status bad">${s.error}</div>` : ''}
+          </div>
+        </div>
+        <div class="small">
+          ${period===1 ? `<div class="status ok">✓ fixed point</div>` : period>=2 ? `<div class="status warn">↔ period‑${period}</div>` : `<div class="muted">no small period</div>`}
+          <div>Lyapunov ≈ <span class="kv">${nice(lam,4)}</span> ${lam>0?'<span class="status warn">chaotic</span>':'<span class="muted">non‑chaotic</span>'}</div>
+          <div>avg(tail) = <span class="kv">${nice(avg,6)}</span> | sd = <span class="kv">${nice(sd,6)}</span></div>
+          <div style="text-align:right;margin-top:6px">
+            <button data-i="${i}" class="toggle">${s.visible?'Hide':'Show'}</button>
+            <button data-i="${i}" class="rm">Remove</button>
+          </div>
+        </div>`;
+      el.appendChild(wrap);
+    }
+    el.querySelectorAll('button.rm').forEach(btn=>{
+      btn.addEventListener('click', e=>{ const i = parseInt(btn.getAttribute('data-i'),10); series.splice(i,1); render(); });
+    });
+    el.querySelectorAll('button.toggle').forEach(btn=>{
+      btn.addEventListener('click', e=>{ const i = parseInt(btn.getAttribute('data-i'),10); series[i].visible = !series[i].visible; render(); });
+    });
+  }
+
+  function drawChart(){
+    const c = $('chart');
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+
+    // compute y min/max across VISIBLE series
+    let minY = +Infinity, maxY = -Infinity, maxN = 0;
+    for(const s of series){
+      if(!s || !s.visible || !s.data || s.data.length===0) continue;
+      maxN = Math.max(maxN, s.data.length);
+      for(const v of s.data){
+        if(Number.isFinite(v)){
+          if(v<minY) minY=v; if(v>maxY) maxY=v;
+        }
+      }
+    }
+    if(!isFinite(minY)||!isFinite(maxY)) { minY=0; maxY=1; }
+    if(Math.abs(maxY-minY) < 1e-9){ maxY += 1e-3; minY -= 1e-3; }
+
+    // padding
+    const padL=54,padB=36,padR=12,padT=16;
+    const W=c.width,H=c.height;
+    const X = (n)=> padL + (W-padL-padR) * (n/(Math.max(1,maxN-1)));
+    const Y = (y)=> padT + (H-padT-padB) * (1 - (y-minY)/(maxY-minY));
+
+    // ----- ticks (new) -----
+    const targetTicks = 10;
+    const xMax = Math.max(1, maxN-1);
+    const xStepNice = Math.max(1, Math.round(niceStep(xMax, targetTicks)));
+    const xTicks = [];
+    for(let v=0; v<=xMax; v+=xStepNice){ xTicks.push(v); }
+    const {ticks: yTicks, step: yStep} = makeTicks(minY, maxY, targetTicks);
+
+    // grid lines
+    ctx.strokeStyle = '#2a3040'; ctx.lineWidth=1;
+    // vertical grid
+    for(const t of xTicks){
+      const x = X(t);
+      ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H-padB); ctx.stroke();
+    }
+    // horizontal grid
+    for(const t of yTicks){
+      const y = Y(t);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W-padR, y); ctx.stroke();
+    }
+
+    // axes labels
+    ctx.fillStyle = '#b0b5bf'; ctx.font='12px ui-sans-serif';
+    ctx.fillText('a_n (y)', 8, 14);
+    ctx.fillText('n', W-18, H-6);
+
+    // numeric tick labels
+    ctx.fillStyle = '#9aa0a6'; ctx.font='11px ui-sans-serif';
+    // y labels (left)
+    for(const t of yTicks){
+      const y = Y(t);
+      const txt = fmtTick(t, yStep);
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(txt, padL-6, y);
+    }
+    // x labels (bottom)
+    for(const t of xTicks){
+      const x = X(t);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(String(t), x, H-padB+6);
+    }
+
+    // series (visible only)
+    for(const s of series){
+      if(!s || !s.visible || !s.data || s.data.length===0) continue;
+      ctx.strokeStyle = s.color; ctx.lineWidth=1.75;
+      ctx.beginPath();
+      for(let i=0;i<s.data.length;i++){
+        const x = X(i), y = Y(s.data[i]);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      // points
+      ctx.fillStyle = s.color;
+      for(let i=0;i<s.data.length;i+=Math.max(1,Math.floor(s.data.length/60))){
+        const x = X(i), y = Y(s.data[i]);
+        ctx.beginPath(); ctx.arc(x,y,2.2,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  // --- Preset loaders (hidden by default) ---
+  function loadA(){
+    addSeries({label:'(a) k=2.0, a0=0.5', k:2.0, a0:0.5, terms:20, visible:false});
+    addSeries({label:'(a) k=2.8, a0=0.5', k:2.8, a0:0.5, terms:20, visible:false});
+  }
+  function loadB(){
+    addSeries({label:'(b) k=2.0, a0=0.2', k:2.0, a0:0.2, terms:20, visible:false});
+    addSeries({label:'(b) k=2.8, a0=0.2', k:2.8, a0:0.2, terms:20, visible:false});
+  }
+  function loadC(){
+    addSeries({label:'(c) k=3.2, a0=0.5', k:3.2, a0:0.5, terms:40, visible:false});
+  }
+  function loadD(){
+    addSeries({label:'(d) k=3.45, a0=0.5', k:3.45, a0:0.5, terms:100, visible:false});
+  }
+  function loadE(){
+    addSeries({label:'(e) k=3.88, a0=0.593', k:3.88, a0:0.593, terms:200, visible:false});
+    addSeries({label:'(e) k=3.88, a0=0.594', k:3.88, a0:0.594, terms:200, visible:false});
+  }
+
+  // events
+  $('add').addEventListener('click', ()=>addSeries({visible:true}));
+  $('clear').addEventListener('click', clearSeries);
+  $('export').addEventListener('click', exportCSV);
+  ['fn-expr','k','p1','p2','a0','terms','burn','label']
+    .forEach(id=>$(id).addEventListener('input', ()=>{ if(series.length){ render(); } }));
+
+  // preset buttons
+  const qa = document.getElementById('load-a'); if(qa) qa.addEventListener('click', loadA);
+  const qb = document.getElementById('load-b'); if(qb) qb.addEventListener('click', loadB);
+  const qc = document.getElementById('load-c'); if(qc) qc.addEventListener('click', loadC);
+  const qd = document.getElementById('load-d'); if(qd) qd.addEventListener('click', loadD);
+  const qe = document.getElementById('load-e'); if(qe) qe.addEventListener('click', loadE);
+  const qshow = document.getElementById('unhide-all'); if(qshow) qshow.addEventListener('click', ()=>{ series.forEach(s=>s.visible=true); render(); });
+  const qhide = document.getElementById('hide-all'); if(qhide) qhide.addEventListener('click', ()=>{ series.forEach(s=>s.visible=false); render(); });
+
+  // seed a couple of visible examples
+  function seed(){
+    addSeries({label:'logistic fixed‑pt', k:2.9, a0:0.5, terms:200, visible:true});
+    addSeries({label:'logistic period‑2', k:3.2, a0:0.5, terms:200, visible:true});
+  }
+  seed();
+
+  // -----------------------------
+  // Self-tests (add tick sanity)
+  // -----------------------------
+  function runSelfTests(){
+    const out = [];
+    function expect(name, cond, info=''){
+      const line = `${cond ? 'PASS' : 'FAIL'} — ${name}${info? ' — ' + info : ''}`;
+      (cond?console.log:console.error)(line);
+      out.push(`<div class="${cond?'test-pass':'test-fail'}">${line}</div>`);
+    }
+    // compileFn
+    let f = compileFn('k*x*(1-x)');
+    expect('compileFn returns function', typeof f === 'function');
+
+    // sequence + detectPeriod known regimes
+    const make = (k, a0=0.5, N=400)=> sequence(f, a0, N, {k, p1:0, p2:0}).data;
+    const p1 = detectPeriod(make(2.9), 8, 0.6); expect('period=1 for k=2.9', p1===1, `got ${p1}`);
+    const p2 = detectPeriod(make(3.2), 8, 0.6); expect('period≥2 for k=3.2', p2>=2, `got ${p2}`);
+    const p4 = detectPeriod(make(3.48), 8, 0.6); expect('period≥2 for k=3.48', p4>=2, `got ${p4}`);
+    const seqCha = make(3.9); const lam = lyapunov(seqCha, f, {k:3.9,p1:0,p2:0}, 100); expect('Lyapunov>0 for k=3.9', lam>0, `λ≈${lam}`);
+
+    // tick helper sanity
+    const s = niceStep(99,10); expect('niceStep yields positive', s>0, `step=${s}`);
+    const {ticks: yT} = makeTicks(0,1,5); expect('makeTicks returns ~5 ticks', yT.length>=4 && yT.length<=7, `len=${yT.length}`);
+
+    const box = $('test-results'); if(box){ box.innerHTML = out.join(''); }
+  }
+
+  $('run-tests').addEventListener('click', runSelfTests);
+})();
+</script>
+</body>
+</html>
